@@ -9,7 +9,12 @@ setup(name='uscisstatus',
       license='MIT',
       packages=['uscisstatus'],
        install_requires=[
-          'requests',
-          'lxml'
+          'selenium',
+          'undetected-chromedriver'
       ],
+      entry_points={
+          'console_scripts': [
+              'uscisstatus=uscisstatus.__main__:main',
+          ],
+      },
       zip_safe=False)
