@@ -3,7 +3,7 @@ from setuptools import setup
 setup(name='uscis-case-status',
       version='0.1.1',
       description='USCIS Status Checker',
-      url='https://github.com/pkhanpara/uscisstatus',
+      url='https://github.com/pkhanpara/uscis-case-status',
       author='Poojan Khanpara',
       author_email='poojankhanpara@gmail.com',
       license='MIT',

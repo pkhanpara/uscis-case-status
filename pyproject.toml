@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/pkhanpara/uscisstatus"
+Homepage = "https://github.com/pkhanpara/uscis-case-status"
 
 [project.scripts]
 uscisstatus = "uscisstatus.__main__:main"
