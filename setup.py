@@ -1,6 +1,6 @@
 from setuptools import setup
 
-setup(name='uscisstatus',
+setup(name='uscis-case-status',
       version='0.1.1',
       description='USCIS Status Checker',
       url='https://github.com/pkhanpara/uscisstatus',

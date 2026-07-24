@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=70.0,<75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uscis-case-status"
+version = "0.1.1"
+description = "USCIS Status Checker"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    { name = "Poojan Khanpara", email = "poojankhanpara@gmail.com" },
+]
+
+dependencies = [
+    "selenium",
+    "undetected-chromedriver",
+]
+
+[project.urls]
+Homepage = "https://github.com/pkhanpara/uscisstatus"
+
+[project.scripts]
+uscisstatus = "uscisstatus.__main__:main"
