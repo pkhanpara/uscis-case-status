@@ -7,14 +7,14 @@ setup(name='uscis-case-status',
       author='Poojan Khanpara',
       author_email='poojankhanpara@gmail.com',
       license='MIT',
-      packages=['uscisstatus'],
+      packages=['uscis_case_status'],
        install_requires=[
           'selenium',
           'undetected-chromedriver'
       ],
       entry_points={
           'console_scripts': [
-              'uscisstatus=uscisstatus.__main__:main',
+              'uscis-case-status=uscis_case_status.__main__:main',
           ],
       },
       zip_safe=False)

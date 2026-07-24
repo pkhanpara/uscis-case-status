@@ -11,13 +11,13 @@ A Python package that scrapes the USCIS website and returns the latest status fo
 ## Installation
 
 ```bash
-pip install .
+pip install uscis-case-status
 ```
 
-Or install in development mode:
+Or install from source:
 
 ```bash
-pip install -e .
+pip install .
 ```
 
 ## Usage
@@ -26,10 +26,10 @@ pip install -e .
 
 ```bash
 # Using the console script
-uscisstatus EAC1234567890
+uscis-case-status EAC1234567890
 
 # Or using the Python module
-python -m uscisstatus EAC1234567890
+python -m uscis_case_status EAC1234567890
 ```
 
 Output:
@@ -43,13 +43,13 @@ Status:  On January 15, 2026, your Form I-765 ...
 Use `--help` for usage info:
 
 ```bash
-uscisstatus --help
+uscis-case-status --help
 ```
 
 ### Python API
 
 ```python
-from uscisstatus import get_case_status
+from uscis_case_status import get_case_status
 
 result = get_case_status("EAC1234567890")
 print(result["date"])    # e.g. "01/15/2026"

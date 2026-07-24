@@ -1,12 +1,12 @@
 import argparse
 import sys
 
-from uscisstatus import get_case_status
+from uscis_case_status import get_case_status
 
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="uscisstatus",
+        prog="uscis-case-status",
         description="Check USCIS case status by receipt number",
     )
     parser.add_argument(

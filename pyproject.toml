@@ -22,4 +22,4 @@ dependencies = [
 Homepage = "https://github.com/pkhanpara/uscis-case-status"
 
 [project.scripts]
-uscisstatus = "uscisstatus.__main__:main"
+uscis-case-status = "uscis_case_status.__main__:main"

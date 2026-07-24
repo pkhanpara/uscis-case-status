@@ -29,7 +29,7 @@ The USCIS site is a Next.js app. The flow is:
 ### Architecture
 
 ```
-uscisstatus/
+uscis_case_status/
   __init__.py    # Core logic: _get_driver(), _quit_driver(), get_case_status()
   __main__.py    # CLI entry point (argparse)
 ```
