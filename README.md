@@ -20,6 +20,26 @@ Or install from source:
 pip install .
 ```
 
+### As an agent skill
+
+This repo ships a [SKILL.md](SKILL.md) so coding agents (Claude Code, Cursor, Codex, etc.) can check case status for you. Install it with the [`skills`](https://github.com/vercel-labs/skills) CLI:
+
+```bash
+npx skills add pkhanpara/uscis-case-status
+```
+
+Useful variants:
+
+```bash
+# Install for a specific agent
+npx skills add pkhanpara/uscis-case-status -a claude-code
+
+# Install globally (user directory) instead of the current project
+npx skills add pkhanpara/uscis-case-status -g -y
+```
+
+The skill shells out to `python -m uscis_case_status`, so install the package (above) as well.
+
 ## Usage
 
 ### CLI
