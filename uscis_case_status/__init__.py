@@ -1,7 +1,6 @@
 import re
 import os
 import subprocess
-import time
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -12,15 +11,44 @@ CASE_DATE_PATTERN = r"[A-Za-z]+\s\d+,\s\d+"
 URL = "https://egov.uscis.gov/casestatus/mycasestatus.do"
 
 
+def _start_xvfb():
+    """Start Xvfb on a free display and return (process, ':<n>').
+
+    -displayfd lets Xvfb pick the first unused display itself and write the
+    number back to us, so we never collide with another Xvfb already on the
+    machine (e.g. one started by xvfb-run -a).
+    """
+    read_fd, write_fd = os.pipe()
+    try:
+        xvfb = subprocess.Popen(
+            ["Xvfb", "-displayfd", str(write_fd), "-screen", "0", "1920x1080x24"],
+            pass_fds=(write_fd,),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        os.close(read_fd)
+        os.close(write_fd)
+        raise RuntimeError("Xvfb is required; install with: sudo apt install xvfb")
+    os.close(write_fd)
+
+    # Blocks until Xvfb is listening, or returns empty if it died first
+    with os.fdopen(read_fd) as f:
+        display_num = f.readline().strip()
+
+    if not display_num:
+        xvfb.terminate()
+        err = xvfb.stderr.read().decode(errors="replace").strip()
+        raise RuntimeError(f"Xvfb failed to start: {err}")
+
+    return xvfb, f":{display_num}"
+
+
 def _get_driver():
     # Cloudflare blocks headless browsers, so we use a virtual display
-    xvfb = subprocess.Popen(
-        ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    os.environ["DISPLAY"] = ":99"
-    time.sleep(1)
+    xvfb, display = _start_xvfb()
+    prev_display = os.environ.get("DISPLAY")
+    os.environ["DISPLAY"] = display
 
     options = uc.ChromeOptions()
     options.add_argument("--no-sandbox")
@@ -28,15 +56,33 @@ def _get_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
-    driver = uc.Chrome(options=options, version_main=150)
+    try:
+        driver = uc.Chrome(options=options, version_main=150)
+    except Exception:
+        _stop_xvfb(xvfb, prev_display)
+        raise
     driver._xvfb = xvfb
+    driver._prev_display = prev_display
     return driver
+
+
+def _stop_xvfb(xvfb, prev_display):
+    if prev_display is None:
+        os.environ.pop("DISPLAY", None)
+    else:
+        os.environ["DISPLAY"] = prev_display
+    xvfb.terminate()
+    try:
+        xvfb.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        xvfb.kill()
+        xvfb.wait()
 
 
 def _quit_driver(driver):
     driver.quit()
     if hasattr(driver, "_xvfb"):
-        driver._xvfb.terminate()
+        _stop_xvfb(driver._xvfb, getattr(driver, "_prev_display", None))
 
 
 def get_case_status(case_id):
