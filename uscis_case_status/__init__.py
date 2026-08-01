@@ -1,5 +1,6 @@
 import re
 import os
+import shutil
 import subprocess
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -9,6 +10,53 @@ from datetime import datetime
 
 CASE_DATE_PATTERN = r"[A-Za-z]+\s\d+,\s\d+"
 URL = "https://egov.uscis.gov/casestatus/mycasestatus.do"
+
+CHROME_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
+# The snap wrapper on PATH re-execs into snap confinement, which Selenium cannot
+# drive; fall back to the real binary inside the snap instead.
+CHROME_FALLBACKS = ("/snap/chromium/current/usr/lib/chromium-browser/chrome",)
+
+
+def _is_launchable(path):
+    """True if `path` is a real browser executable rather than a wrapper.
+
+    On Ubuntu both /snap/bin/chromium (a symlink to the snap client) and
+    /usr/bin/chromium-browser (a shell shim) re-exec into snap confinement,
+    which Selenium cannot attach to. Real Chrome binaries are ELF.
+    """
+    if path.startswith("/snap/bin/") or os.path.realpath(path) == "/usr/bin/snap":
+        return False
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def _find_chrome():
+    """Return the path to a usable Chrome/Chromium binary."""
+    for name in CHROME_NAMES:
+        path = shutil.which(name)
+        if path and _is_launchable(path):
+            return path
+    for path in CHROME_FALLBACKS:
+        if os.path.exists(path):
+            return path
+    raise RuntimeError(
+        "No Chrome/Chromium binary found; install one of: "
+        + ", ".join(CHROME_NAMES)
+    )
+
+
+def _chrome_major_version(binary):
+    """Return the major version of `binary`, e.g. 150."""
+    out = subprocess.run(
+        [binary, "--version"], capture_output=True, text=True
+    ).stdout
+    match = re.search(r"(\d+)\.\d+\.\d+", out)
+    if not match:
+        raise RuntimeError(f"Could not parse version from: {out.strip()!r}")
+    return int(match.group(1))
 
 
 def _start_xvfb():
@@ -45,6 +93,10 @@ def _start_xvfb():
 
 
 def _get_driver():
+    # Resolve Chrome before starting Xvfb so a missing browser doesn't leak a server
+    chrome = _find_chrome()
+    version_main = _chrome_major_version(chrome)
+
     # Cloudflare blocks headless browsers, so we use a virtual display
     xvfb, display = _start_xvfb()
     prev_display = os.environ.get("DISPLAY")
@@ -55,9 +107,9 @@ def _get_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+    options.binary_location = chrome
     try:
-        driver = uc.Chrome(options=options, version_main=150)
+        driver = uc.Chrome(options=options, version_main=version_main)
     except Exception:
         _stop_xvfb(xvfb, prev_display)
         raise
