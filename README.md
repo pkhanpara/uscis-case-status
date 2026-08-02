@@ -83,6 +83,19 @@ print(result["status"])  # Full status message text
 
 Raises `ValueError` if the case ID is invalid or the status cannot be parsed.
 
+## Development
+
+Activate the pre-commit hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+It lints every tracked `*.py` on each commit. When a commit stages a `*.py` file it additionally
+drives a real browser against the live USCIS site (~1-2 min), so those commits need network access,
+Chrome and Xvfb. Use `SKIP_BROWSER_TESTS=1 git commit ...` to skip just the browser checks, or
+`git commit --no-verify` to skip the hook entirely.
+
 ## Building a Wheel
 
 ```bash

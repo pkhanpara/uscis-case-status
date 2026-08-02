@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# Pre-commit checks for uscis-case-status.
+#
+#   1. pylint over every tracked *.py  — always, matches the CI workflow
+#   2. live scraper against a known-good receipt number
+#   3. live scraper against a bogus receipt number, plus an Xvfb leak check
+#
+# Checks 2 and 3 drive a real browser against the live USCIS site (~1-2 min) and
+# only run when the commit stages a *.py file.
+#
+# Install once:  git config core.hooksPath .githooks
+# Skip the slow checks:  SKIP_BROWSER_TESTS=1 git commit ...
+# Skip everything:       git commit --no-verify
+
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+VALID_RECEIPT=SRC2690189833
+INVALID_RECEIPT=SRC1234567890
+TIMEOUT=180
+
+fail() {
+    printf '\033[31mpre-commit: %s\033[0m\n' "$1" >&2
+    exit 1
+}
+
+# --- 1. pylint -------------------------------------------------------------
+# Lint with the dependencies importable, otherwise every selenium /
+# undetected_chromedriver import comes back as a bogus E0401.
+py_files=$(git ls-files '*.py')
+if [ -n "$py_files" ]; then
+    echo "pre-commit: pylint"
+    if python3 -c 'import pylint, selenium, undetected_chromedriver' 2>/dev/null; then
+        # shellcheck disable=SC2086
+        python3 -m pylint $py_files || fail "pylint failed"
+    elif command -v uv >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        uv tool run --with selenium --with undetected-chromedriver --with setuptools \
+            pylint $py_files || fail "pylint failed"
+    else
+        fail "no way to run pylint; install uv, or pip install pylint selenium undetected-chromedriver"
+    fi
+fi
+
+# --- gate for the live browser checks --------------------------------------
+if [ -n "${SKIP_BROWSER_TESTS:-}" ]; then
+    echo "pre-commit: browser checks skipped (SKIP_BROWSER_TESTS is set)"
+    exit 0
+fi
+if [ -z "$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')" ]; then
+    echo "pre-commit: browser checks skipped (no *.py staged)"
+    exit 0
+fi
+
+# Our servers are the 1920x1080x24 ones started by _start_xvfb(); other Xvfb
+# servers on the machine (e.g. from xvfb-run) use a different geometry.
+xvfb_count() {
+    ps -eo args | grep -c '[X]vfb .*1920x1080x24' || true
+}
+xvfb_before=$(xvfb_count)
+
+# --- 2. success path -------------------------------------------------------
+echo "pre-commit: checking $VALID_RECEIPT (live, ~1 min)"
+if ! out=$(timeout "$TIMEOUT" python3 -m uscis_case_status "$VALID_RECEIPT" 2>&1); then
+    printf '%s\n' "$out" >&2
+    fail "lookup of $VALID_RECEIPT failed"
+fi
+grep -q "$VALID_RECEIPT" <<<"$out" ||
+    fail "output for $VALID_RECEIPT does not mention the receipt number"
+# Match the shape, not the value — the real case keeps moving.
+grep -Eq '^Date:[[:space:]]+[0-9]{2}/[0-9]{2}/[0-9]{4}$' <<<"$out" ||
+    fail "no MM/DD/YYYY date in the output for $VALID_RECEIPT"
+
+# --- 3. failure path -------------------------------------------------------
+echo "pre-commit: checking $INVALID_RECEIPT (expected to fail cleanly)"
+if err=$(timeout "$TIMEOUT" python3 -m uscis_case_status "$INVALID_RECEIPT" 2>&1 >/dev/null); then
+    fail "lookup of bogus receipt $INVALID_RECEIPT unexpectedly succeeded"
+fi
+# A friendly message, not a bare traceback.
+grep -q '^Error: ' <<<"$err" ||
+    fail "bogus receipt did not produce an 'Error: ' message"
+
+xvfb_after=$(xvfb_count)
+[ "$xvfb_after" -le "$xvfb_before" ] ||
+    fail "leaked $((xvfb_after - xvfb_before)) Xvfb server(s); check browser teardown"
+
+echo "pre-commit: all checks passed"

@@ -38,9 +38,10 @@ in `uscis_case_status/__main__.py`.
 - `get_case_status(case_id)` — public API. Starts the browser, fills the receipt-number field,
   clicks **Check Status**, waits for a `<p>` containing the case ID, and regex-extracts the
   date from the status text. Raises `ValueError` if the case ID is invalid or the date can't be
-  parsed. Always tears the browser down in a `finally`.
-- `_get_driver()` / `_quit_driver(driver)` — browser lifecycle. The driver carries `_xvfb` and
-  `_prev_display` attributes so teardown can reap the server and restore `DISPLAY`.
+  parsed. Runs inside `with _browser() as driver:`, so the browser always tears down.
+- `_browser()` — a `@contextmanager` owning the browser lifecycle. It holds the Xvfb process and
+  the previous `DISPLAY` in its own scope and, on exit, quits the driver, reaps the server and
+  restores `DISPLAY` — including when `uc.Chrome()` itself fails.
 - `_start_xvfb()` / `_stop_xvfb()` — virtual display lifecycle.
 - `_find_chrome()` / `_chrome_major_version()` — locate the browser and derive the version to
   pin `undetected_chromedriver` to.
@@ -61,5 +62,21 @@ separate HTML-parsing step and no lxml dependency.
 
 ## Testing
 
-There are no automated tests and no CI. Verify changes by running the CLI against a real receipt
-number and confirming no Xvfb servers leak (`ps -eo args | grep '^Xvfb'`).
+There is no unit test suite. Two things guard the code instead:
+
+- **CI** — `.github/workflows/pylint.yml` runs `pylint` over every tracked `*.py` on push
+  (Python 3.8/3.9/3.10). It installs the package first, so the lint sees the real selenium and
+  undetected-chromedriver APIs; without that every import is a bogus `E0401`.
+- **A pre-commit hook** — `.githooks/pre-commit`, activated once per clone with
+  `git config core.hooksPath .githooks`. It runs pylint on every commit, plus two live checks that
+  only fire when the commit stages a `*.py` file (~1-2 min, needs network, Chrome and Xvfb): a
+  known-good receipt number must return a `MM/DD/YYYY` date, and a bogus one must exit non-zero with
+  a friendly `Error:` line rather than a traceback. It then confirms no Xvfb server leaked, which is
+  what regresses if browser teardown breaks. Escape hatches: `SKIP_BROWSER_TESTS=1 git commit ...`
+  for the slow half, `git commit --no-verify` for all of it.
+
+To check for leaked servers by hand: `ps -eo args | grep '^Xvfb'`.
+
+Note the hook checks the **working tree**, not the staged snapshot — after a partial `git add -p` it
+validates code that isn't exactly what's being committed. Stashing unstaged changes around the run
+was considered and rejected: a failed `stash pop` can lose work, a worse failure mode than this gap.
