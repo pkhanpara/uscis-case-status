@@ -30,10 +30,9 @@ The USCIS site is a Next.js app. The flow is:
 
 ```
 uscis_case_status/
-  __init__.py    # Core logic: _get_driver(), _quit_driver(), get_case_status()
+  __init__.py    # Core logic: _browser(), get_case_status()
   __main__.py    # CLI entry point (argparse)
 ```
 
-- `_get_driver()` — Starts Xvfb, configures undetected-chromedriver, and returns a browser instance. The Xvfb process is attached to the driver for cleanup.
-- `_quit_driver(driver)` — Closes the browser and terminates the Xvfb process.
+- `_browser()` — A context manager that starts Xvfb, configures undetected-chromedriver, and yields a browser instance. On exit it closes the browser and terminates the Xvfb process.
 - `get_case_status(case_id)` — The public API. Drives the browser through the form submission flow, extracts the status text, parses the date, and returns `{"status": ..., "date": ...}`.

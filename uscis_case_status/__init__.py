@@ -1,12 +1,15 @@
+"""Scrape the USCIS case status page for a given receipt number."""
+
 import re
 import os
 import shutil
 import subprocess
+from contextlib import contextmanager
+from datetime import datetime
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from datetime import datetime
 
 CASE_DATE_PATTERN = r"[A-Za-z]+\s\d+,\s\d+"
 URL = "https://egov.uscis.gov/casestatus/mycasestatus.do"
@@ -51,7 +54,7 @@ def _find_chrome():
 def _chrome_major_version(binary):
     """Return the major version of `binary`, e.g. 150."""
     out = subprocess.run(
-        [binary, "--version"], capture_output=True, text=True
+        [binary, "--version"], capture_output=True, text=True, check=False
     ).stdout
     match = re.search(r"(\d+)\.\d+\.\d+", out)
     if not match:
@@ -68,16 +71,19 @@ def _start_xvfb():
     """
     read_fd, write_fd = os.pipe()
     try:
-        xvfb = subprocess.Popen(
+        # The server outlives this function; the caller reaps it via _stop_xvfb
+        xvfb = subprocess.Popen(  # pylint: disable=consider-using-with
             ["Xvfb", "-displayfd", str(write_fd), "-screen", "0", "1920x1080x24"],
             pass_fds=(write_fd,),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         os.close(read_fd)
         os.close(write_fd)
-        raise RuntimeError("Xvfb is required; install with: sudo apt install xvfb")
+        raise RuntimeError(
+            "Xvfb is required; install with: sudo apt install xvfb"
+        ) from exc
     os.close(write_fd)
 
     # Blocks until Xvfb is listening, or returns empty if it died first
@@ -92,7 +98,9 @@ def _start_xvfb():
     return xvfb, f":{display_num}"
 
 
-def _get_driver():
+@contextmanager
+def _browser():
+    """Yield a Chrome driver running on a throwaway Xvfb display."""
     # Resolve Chrome before starting Xvfb so a missing browser doesn't leak a server
     chrome = _find_chrome()
     version_main = _chrome_major_version(chrome)
@@ -108,14 +116,15 @@ def _get_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     options.binary_location = chrome
+
+    driver = None
     try:
         driver = uc.Chrome(options=options, version_main=version_main)
-    except Exception:
+        yield driver
+    finally:
+        if driver is not None:
+            driver.quit()
         _stop_xvfb(xvfb, prev_display)
-        raise
-    driver._xvfb = xvfb
-    driver._prev_display = prev_display
-    return driver
 
 
 def _stop_xvfb(xvfb, prev_display):
@@ -131,15 +140,15 @@ def _stop_xvfb(xvfb, prev_display):
         xvfb.wait()
 
 
-def _quit_driver(driver):
-    driver.quit()
-    if hasattr(driver, "_xvfb"):
-        _stop_xvfb(driver._xvfb, getattr(driver, "_prev_display", None))
-
-
 def get_case_status(case_id):
-    driver = _get_driver()
-    try:
+    """Look up `case_id` on the USCIS site.
+
+    Returns {"status": <message text>, "date": "MM/DD/YYYY"} where the date is
+    when the case last changed. Raises ValueError if the receipt number is not
+    recognised or the date can't be parsed out of the message, and RuntimeError
+    if Chrome or Xvfb is missing.
+    """
+    with _browser() as driver:
         driver.get(URL)
 
         wait = WebDriverWait(driver, 15)
@@ -176,12 +185,11 @@ def get_case_status(case_id):
             raise ValueError("Please make sure your case id is valid")
 
         p = re.search(CASE_DATE_PATTERN, status_message)
-        if p is not None:
-            match = p.group(0)
-            last_update_date = datetime.strptime(match, "%B %d, %Y")
-            last_update_date = last_update_date.strftime("%m/%d/%Y")
-            return {"status": status_message, "date": last_update_date}
-        else:
+        if p is None:
             raise ValueError("Could not parse date from status message")
-    finally:
-        _quit_driver(driver)
+
+        last_update_date = datetime.strptime(p.group(0), "%B %d, %Y")
+        return {
+            "status": status_message,
+            "date": last_update_date.strftime("%m/%d/%Y"),
+        }

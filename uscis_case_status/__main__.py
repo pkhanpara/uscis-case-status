@@ -1,3 +1,5 @@
+"""Command line entry point for the USCIS case status checker."""
+
 import argparse
 import sys
 
@@ -5,6 +7,7 @@ from uscis_case_status import get_case_status
 
 
 def main():
+    """Parse the receipt number from argv and print its case status."""
     parser = argparse.ArgumentParser(
         prog="uscis-case-status",
         description="Check USCIS case status by receipt number",
@@ -20,10 +23,9 @@ def main():
         print(f"Case:    {args.case_id}")
         print(f"Date:    {result['date']}")
         print(f"Status:  {result['status']}")
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
+    # A CLI should report any failure — bad receipt number, missing Xvfb,
+    # Selenium timeout — as a one-line message rather than a traceback.
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
