@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uscis-case-status"
-version = "1.0.0"
+version = "1.0.1"
 description = "USCIS Status Checker"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,6 +16,9 @@ authors = [
 dependencies = [
     "selenium",
     "undetected-chromedriver",
+    # undetected_chromedriver imports distutils, which Python 3.12 removed;
+    # setuptools still ships it, and a fresh 3.12 venv has neither.
+    "setuptools",
 ]
 
 [project.urls]
